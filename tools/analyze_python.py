@@ -1,12 +1,11 @@
 """Pythonファイル全体からDDLのテーブル名を検索し、既存のテーブルアクセスCSVに追記する。"""
 import argparse
 import csv
-import ast
 import re
 import tokenize
 from pathlib import Path
 
-from extract_sql_table_accesses import read_ddl_tables, read_ddl_logical_names, tokenize_sql
+from extract_sql_table_accesses import read_ddl_tables, read_ddl_logical_names
 
 COLUMNS = ['job', 'table', 'operation', 'path', 'xml', 'statement', 'table_logical_name']
 
@@ -14,38 +13,20 @@ COLUMNS = ['job', 'table', 'operation', 'path', 'xml', 'statement', 'table_logic
 def read_selects(path, tables):
     """入力：PythonファイルとDDLのテーブル辞書。
 
-    処理：文字列を取り出し、JavaのSQL解析と共通のtokenize_sqlで分割する。
-    各トークンを大文字に揃え、DDLのテーブル辞書と完全一致で照合する。
-    戻り値：(文字列の開始行, テーブル名)の一覧。同じ行・表は一件にする。
-    コメントや変数名は除外する。説明用の文字列も対象で、SELECTの有無は問わない。
-    f文字列は固定部分だけを検索し、埋め込み式の値は追跡しない。
-    ソースは実行しない。変数展開や文字列連結、他ファイルの値は追跡しない。
+    処理：ファイル全体をテキストとして検索する。構文解析・実行はしない。
+    大文字に揃えて照合し、名前の前後に英数字・アンダースコアが続く一致は除く。
+    戻り値：(行番号, テーブル名)の一覧。同じ行・表は一件にする。
+    引用符・SELECTの有無は問わず、コメントや変数名も検索対象。
+    変数展開・文字列連結・他ファイルの値は追跡しない。
     """
+    # tokenize.openは文字コード宣言を読むためだけに使用する。構文は解析しない。
     with tokenize.open(path) as stream:
         source = stream.read()
-    tree = ast.parse(source, filename=str(path))
-    results = set()
-
-    def visit(node):
-        # f文字列の式は検索しない。固定部分だけを文字列として扱う。
-        if isinstance(node, ast.JoinedStr):
-            for part in node.values:
-                if isinstance(part, ast.Constant) and isinstance(part.value, str):
-                    collect(part.value, node.lineno)
-        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
-            collect(node.value, node.lineno)
-        else:
-            for child in ast.iter_child_nodes(node):
-                visit(child)
-
-    def collect(value, line):
-        for token in tokenize_sql(value):
-            table = tables.get(token.upper())
-            if table is not None:
-                results.add((line, table))
-
-    visit(tree)
-    return sorted(results)
+    patterns = [(name, re.compile(r'(?<!\w)' + re.escape(name) + r'(?!\w)'))
+                for name in tables]
+    return [(line, tables[name])
+            for line, text in enumerate(source.splitlines(), 1)
+            for name, pattern in patterns if pattern.search(text.upper())]
 
 
 def read_inserts(path, jobs, tables):
