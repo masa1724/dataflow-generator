@@ -236,7 +236,7 @@ def collect_job_accesses(syntax, edges, unresolved, statements):
         syntax：抽出情報。edges：呼び出し接続。unresolved：未解決の呼び出し。
         statements：MapperのSQL識別キーごとのアクセス情報。
     処理：
-        jobパッケージ内の引数なしmainProcessを探し、呼び出し先を順にたどる。
+        パッケージや引数個数を問わずmainProcessを探し、呼び出し先を順にたどる。
     戻り値：
         (jobs, results)。jobsは入口ごとの到達メソッド・未解決情報、
         resultsはジョブIDと根拠経路を付けたテーブルアクセスのリスト。
@@ -251,8 +251,9 @@ def collect_job_accesses(syntax, edges, unresolved, statements):
     jobs, results = {}, []
     for entry, m in methods.items():
         match = re.search(r'\.job\.([^.]+)\.', m['owner'])
-        if not match or m['name'] != 'mainProcess' or m['arity'] != 0: continue
-        job = match.group(1).upper()
+        if m['name'] != 'mainProcess': continue
+        # 従来のIDは維持するが、パッケージ構成による対象の除外はしない。
+        job = match.group(1).upper() if match else m['owner'].rsplit('.', 1)[-1]
         reached = set()
         def walk(node, path):
             """現在のメソッドから呼び出し先を順にたどる。

@@ -37,7 +37,7 @@ def read_job_names(path):
     """入力：ジョブID・論理名・機能名・色のTSV。処理：表示設定を読み込む。
 
     戻り値：ID→表示設定の辞書。例：J001に配送・淡い青を設定する。
-    4列すべて必須。機能名は2文字、色は#RRGGBB形式。
+    4列すべて必須。機能名は空欄不可・文字数制限なし。色は#RRGGBB形式。
     空欄・重複IDはエラー。UTF-8のBOM付きファイルも受け付ける。
     """
     names = {}
@@ -52,8 +52,8 @@ def read_job_names(path):
                 raise ValueError(f'Invalid or duplicate job name at TSV line {reader.line_num}')
             function = (row.get('function_name') or '').strip()
             color = (row.get('color') or '').strip()
-            if len(function) != 2 or not re.fullmatch(r'#[0-9A-Fa-f]{6}', color):
-                raise ValueError(f'Expected 2-character function and #RRGGBB color at TSV line {reader.line_num}')
+            if not function or not re.fullmatch(r'#[0-9A-Fa-f]{6}', color):
+                raise ValueError(f'Expected non-empty function and #RRGGBB color at TSV line {reader.line_num}')
             names[job] = {'logical_name': name, 'function_name': function, 'color': color.lstrip('#') or 'E3EBF0'}
     return names
 
