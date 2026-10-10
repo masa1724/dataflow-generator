@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="example.mapper.ShippingMapper">
+  <!-- 注文ジョブ：注文・明細・顧客から配送依頼を作る。 -->
+  <insert id="createRequests">
+    INSERT INTO SHIPPING_REQUESTS (ORDER_ID, CUSTOMER_ID, STATUS)
+    SELECT DISTINCT o.ORDER_ID, o.CUSTOMER_ID, 'READY'
+    FROM ORDERS o
+    JOIN ORDER_ITEMS i ON i.ORDER_ID = o.ORDER_ID
+    JOIN CUSTOMERS c ON c.CUSTOMER_ID = o.CUSTOMER_ID
+    WHERE o.PROCESSED = 0
+  </insert>
+  <!-- 配送ジョブ：配送依頼と在庫を参照して出荷情報を作る。 -->
+  <insert id="createShipments">
+    INSERT INTO SHIPMENTS (ORDER_ID, SHIPPED_AT)
+    SELECT DISTINCT r.ORDER_ID, CURRENT_TIMESTAMP
+    FROM SHIPPING_REQUESTS r
+    JOIN ORDER_ITEMS i ON i.ORDER_ID = r.ORDER_ID
+    JOIN INVENTORY v ON v.PRODUCT_ID = i.PRODUCT_ID
+    WHERE r.STATUS = 'READY' AND v.QUANTITY &gt; 0
+  </insert>
+  <update id="markRequestsShipped">
+    UPDATE SHIPPING_REQUESTS SET STATUS = 'SHIPPED'
+    WHERE ORDER_ID IN (SELECT ORDER_ID FROM SHIPMENTS)
+  </update>
+  <!-- ジョブ3：未設定の出荷時刻を更新する。 -->
+  <update id="updateShipmentTime">
+    UPDATE SHIPMENTS SET SHIPPED_AT = CURRENT_TIMESTAMP
+    WHERE SHIPPED_AT IS NULL
+  </update>
+</mapper>

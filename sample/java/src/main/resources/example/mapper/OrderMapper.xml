@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="example.mapper.OrderMapper">
+  <select id="findOrders" resultType="java.lang.Long">SELECT ORDER_ID FROM ORDERS</select>
+  <select id="findSecret" resultType="java.lang.Long">SELECT ID FROM SECRET_AUDIT</select>
+  <update id="updateOrders">UPDATE ORDERS SET PROCESSED = 1</update>
+  <delete id="clear">DELETE FROM SHOULD_NOT_APPEAR</delete>
+  <!-- J001: 3テーブルの読み取り。列はテーブル名と同じ名前にしない。 -->
+  <select id="findOrderDetails" resultType="java.lang.Long">
+    SELECT o.ORDER_ID
+    FROM ORDERS o
+    JOIN CUSTOMERS c ON c.CUSTOMER_ID = o.CUSTOMER_ID
+    JOIN ORDER_ITEMS i ON i.ORDER_ID = o.ORDER_ID
+  </select>
+  <!-- J002: 書き込み先1テーブル、読み取り元2テーブル。 -->
+  <insert id="archiveOrders">
+    INSERT INTO ORDER_ARCHIVE (ORDER_ID, CUSTOMER_ID)
+    SELECT o.ORDER_ID, o.CUSTOMER_ID
+    FROM ORDERS o
+    JOIN CUSTOMERS c ON c.CUSTOMER_ID = o.CUSTOMER_ID
+    WHERE o.PROCESSED = 1
+  </insert>
+  <!-- J002: 削除対象とサブクエリの読み取り元を区別する。 -->
+  <delete id="deleteArchivedOrders">
+    DELETE FROM ORDER_ITEMS
+    WHERE ORDER_ID IN (SELECT ORDER_ID FROM ORDER_ARCHIVE)
+  </delete>
+</mapper>

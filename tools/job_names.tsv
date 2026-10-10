@@ -1,0 +1,7 @@
+job_id	logical_name	function_name	color
+J001	配送依頼作成	配送	#E3EFFA
+J002	出荷情報作成	出荷	#E5F2E6
+J003	出荷時刻更新	出荷	#E5F2E6
+J004	登録管理・出荷参照	集計	#EEE6F7
+
+

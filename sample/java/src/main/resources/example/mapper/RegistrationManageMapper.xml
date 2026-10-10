@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="example.mapper.RegistrationManageMapper">
+  <insert id="recordJ001">
+    INSERT INTO REGISTRATION_MANAGE (JOB_ID, REGISTERED_AT)
+    VALUES ('J001', CURRENT_TIMESTAMP)
+  </insert>
+  <select id="findJ001Registration" resultType="java.util.Map">
+    SELECT JOB_ID, REGISTERED_AT FROM REGISTRATION_MANAGE WHERE JOB_ID = 'J001'
+  </select>
+</mapper>
