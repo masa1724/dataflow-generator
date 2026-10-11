@@ -65,10 +65,20 @@ WHERE order_id IN (SELECT order_id FROM ORDERS)</insert>
 <select id="parameter">SELECT * FROM ${tableName} JOIN ORDERS ON ID=#{id}</select>
 <select id="unknown">SELECT * FROM missing_table</select>
 <select id="dynamic">SELECT * FROM ORDERS <where>id=1</where></select>
+<sql id="source">FROM ORDERS <if test="x">JOIN SECRET_AUDIT ON 1=1</if></sql>
+<sql id="loop"><include refid="loop"/></sql>
+<select id="included">SELECT * <include refid="source"/></select>
+<select id="cross">SELECT * <include refid="other.Mapper.source"><property name="table" value="ORDERS"/></include></select>
+<select id="missing">SELECT * FROM ORDERS <include refid="absent"/></select>
+<select id="cycle">SELECT * FROM ORDERS <include refid="loop"/></select>
+<select id="branches">SELECT * FROM <choose><when test="x">ORDERS</when><otherwise>SECRET_AUDIT</otherwise></choose></select>
 </mapper>''', encoding='utf-8')
+        (resources / 'Other.xml').write_text('<mapper namespace="other.Mapper"><sql id="source">FROM ${table}</sql></mapper>', encoding='utf-8')
         statements, issues = read_mapper_statements(resources, catalog)
+        for name, expected in [('dynamic', {'ORDERS'}), ('included', {'ORDERS', 'SECRET_AUDIT'}), ('cross', {'ORDERS'}), ('branches', {'ORDERS', 'SECRET_AUDIT'}), ('missing', {'ORDERS'}), ('cycle', {'ORDERS'})]:
+            assert {a['table'] for a in statements['example.Mapper#' + name]} == expected, name
         assert {(a['table'], a['operation']) for a in statements['example.Mapper#copy']} == {('SECRET_AUDIT', 'INSERT'), ('ORDERS', 'SELECT')}
-        assert {i['statement'] for i in issues} == {'example.Mapper#unknown', 'example.Mapper#dynamic', 'example.Mapper#parameter'}
+        assert {i['statement'] for i in issues} == {'example.Mapper#unknown', 'example.Mapper#parameter', 'example.Mapper#missing', 'example.Mapper#cycle'}
         assert {(a['table'], a['operation']) for a in statements['example.Mapper#parameter']} == {('${tableName}', 'SELECT'), ('ORDERS', 'SELECT')}
     print(f'PASS: {len(cases)} supported SQL cases, {len(bad_cases)} negative cases, DDL and Mapper XML integration')
 

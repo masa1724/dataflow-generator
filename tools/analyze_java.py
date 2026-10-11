@@ -201,25 +201,59 @@ def read_mapper_statements(mapper_dir, tables, source_regex=None):
         example.mapper.OrderMapper#findOrdersをキーにordersへのSELECT等を登録。
     """
     statements, sql_issues = defaultdict(list), []
+    mappers, fragments = [], {}
+    # 別XMLのnamespace付き参照にも対応するため、先に全対象のsql定義を集める。
     for xml in sorted(mapper_dir.rglob('*.xml')):
-        # Javaと同じ指定で、XMLのフルパスも/区切りにして照合する。
         if source_regex is not None and not re.search(source_regex, xml.resolve().as_posix()):
             continue
         root = ET.parse(xml).getroot()
         if root.tag != 'mapper':
             continue
+        namespace = root.attrib['namespace']
+        mappers.append((xml, root, namespace))
+        for fragment in root.findall('sql'):
+            key = namespace + '.' + fragment.attrib['id']
+            if key in fragments:
+                raise ValueError('duplicate SQL fragment: ' + key)
+            fragments[key] = (fragment, namespace)
+
+    def expand(node, namespace, stack, properties, problems):
+        """全分岐の本文を連結する。includeを再帰展開し、未解決・循環参照は記録する。"""
+        def substitute(text):
+            return re.sub(r'\$\{([^}]+)\}', lambda m: properties.get(m[1], m[0]), text or '')
+
+        if node.tag == 'include':
+            local = dict(properties)
+            for prop in node.findall('property'):
+                local[prop.attrib['name']] = substitute(prop.attrib.get('value', ''))
+            ref = substitute(node.attrib.get('refid', ''))
+            key = ref if '.' in ref else namespace + '.' + ref
+            if key in stack:
+                problems.append('cyclic include: ' + key)
+                return '\n'
+            if key not in fragments:
+                problems.append('unresolved include: ' + key)
+                return '\n'
+            fragment, owner = fragments[key]
+            return expand(fragment, owner, stack + (key,), local, problems)
+        if node.tag == 'bind':
+            problems.append('bind expression is not evaluated')
+        parts = [substitute(node.text)]
+        # 条件式は評価しない。chooseの各分岐もすべて対象とする。
+        for child in node:
+            parts.extend(['\n', expand(child, namespace, stack, properties, problems), '\n', substitute(child.tail)])
+        return ''.join(parts)
+
+    for xml, root, namespace in mappers:
         for stmt in root:
             if stmt.tag not in ('select', 'insert', 'update', 'delete'):
                 continue
-            key = root.attrib['namespace'] + '#' + stmt.attrib['id']
-            # 行コメントの終わりを保つため、トークン化前に改行を消さない。
-            sql = ''.join(stmt.itertext()).strip()
-            # 子要素を持つ動的SQL/includeは組み立てない。文字列展開は未確定の名前として抽出する。
-            if len(stmt):
-                accesses, problems = [], ['dynamic SQL/include is unsupported']
-            else:
-                accesses, problems = extract_table_accesses(sql, tables)
-            for problem in problems:
+            key = namespace + '#' + stmt.attrib['id']
+            problems = []
+            sql = expand(stmt, namespace, (), {}, problems).strip()
+            accesses, extraction_problems = extract_table_accesses(sql, tables)
+            problems.extend(extraction_problems)
+            for problem in dict.fromkeys(problems):
                 sql_issues.append({'statement': key, 'reason': problem, 'sql': sql})
             for table, operation in accesses:
                 statements[key].append({
